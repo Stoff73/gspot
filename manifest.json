@@ -1,0 +1,9 @@
+{
+  "name": "gSpot Golf",
+  "short_name": "gSpot",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f1a1c",
+  "theme_color": "#0f1a1c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
