@@ -30,3 +30,8 @@ Checked against R&A Rules of Handicapping 2024 (Rules 3.1, 5.1, 5.2, 5.3, 5.7, 5
 
 ## Out of scope
 GPS, live leaderboards, multi-player, accounts, cloud sync, wearables.
+
+## Sync (added 2026-09-08)
+- `server/sync.php` on SiteGround (PHP + MySQL): one table `gspot_state`, one row holding the whole app state as JSON with a revision number. GET returns it, POST replaces it and bumps rev. Auth is a shared token in the `X-Token` header; CORS limited to the app origin. `config.php` holds credentials and is never committed.
+- App: Sync card in Courses (URL + token). Pull on open and when the app becomes visible; push 1.5 s after any change to courses, rounds, settings or draft; retry when back online. Pushes wait until the first pull has completed so a new device adopts the server copy instead of overwriting it.
+- Last write wins by revision. Ceiling: two devices both editing offline, the later push overwrites. Upgrade path: per-round rows merged by id.
