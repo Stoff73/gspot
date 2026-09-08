@@ -31,7 +31,8 @@ Checked against R&A Rules of Handicapping 2024 (Rules 3.1, 5.1, 5.2, 5.3, 5.7, 5
 ## Out of scope
 GPS, live leaderboards, multi-player, accounts, cloud sync, wearables.
 
-## Sync (added 2026-09-08)
-- `server/sync.php` on SiteGround (PHP + MySQL): one table `gspot_state`, one row holding the whole app state as JSON with a revision number. GET returns it, POST replaces it and bumps rev. Auth is a shared token in the `X-Token` header; CORS limited to the app origin. `config.php` holds credentials and is never committed.
-- App: Sync card in Courses (URL + token). Pull on open and when the app becomes visible; push 1.5 s after any change to courses, rounds, settings or draft; retry when back online. Pushes wait until the first pull has completed so a new device adopts the server copy instead of overwriting it.
-- Last write wins by revision. Ceiling: two devices both editing offline, the later push overwrites. Upgrade path: per-round rows merged by id.
+## Sync (added 2026-09-08, reworked same day)
+- No server. App state (courses, rounds, settings, draft) is one JSON file, `state.json`, in the private repo `Stoff73/gspot-data`, read and written through GitHub's contents API with a fine-grained token (Contents read/write on that repo only). The token lives only in the phone's local storage.
+- Pull on open and when the app becomes visible; push 1.5 s after any change; retry when back online. Pushes wait until the first pull has completed so a new device adopts the server copy.
+- Last write wins: a push with a stale file sha re-reads the sha and writes again. Ceiling: two devices both editing offline, the later push overwrites. Upgrade path: per-round merge by id.
+- Rejected alternatives: PHP + MySQL on SiteGround (too much setup for one user); a database on the Mac (HTTPS page cannot call a plain-http LAN address, and the Mac must be awake on the same Wi-Fi).

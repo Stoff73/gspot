@@ -16,55 +16,68 @@ for (const c of window.SEED_COURSES || []) if (!S.courses.some(x => x.id === c.i
 S.courses = S.courses.filter(c => c.id !== 'seed-example' || S.rounds.some(r => r.courseId === c.id)); // drop placeholder
 function save() { localStorage.setItem(KEY, JSON.stringify(S)); if (syncReady) schedulePush(); }
 
-// ---------- sync (server/sync.php: one JSON row, last write wins) ----------
+// ---------- sync: state.json in a private GitHub repo, read/written via the contents API. Last write wins. ----------
+const SYNC_REPO = 'Stoff73/gspot-data', SYNC_FILE = 'state.json';
 const SYNC_KEY = 'gspot-sync';
-let sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (e) { return {}; } })(); // {url, token, rev, at, status}
+let sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (e) { return {}; } })(); // {token, sha, at, status, api?}
 const saveSync = () => localStorage.setItem(SYNC_KEY, JSON.stringify(sync));
 const syncData = () => ({ courses: S.courses, rounds: S.rounds, settings: S.settings, draft: S.draft });
 let lastSynced = null;  // JSON of syncData() as last agreed with the server
 let syncReady = false;  // no pushes until the first pull has had its chance
 let pushTimer;
-async function syncCall(method, body) {
-  const r = await fetch(sync.url, { method, headers: { 'X-Token': sync.token || '', 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
+const b64e = str => btoa(unescape(encodeURIComponent(str)));
+const b64d = str => decodeURIComponent(escape(atob(str.replace(/\n/g, ''))));
+async function ghFetch(method, body) {
+  const url = (sync.api || 'https://api.github.com') + `/repos/${SYNC_REPO}/contents/${SYNC_FILE}` + (method === 'GET' ? '?t=' + Date.now() : '');
+  const r = await fetch(url, { method, headers: { Authorization: 'Bearer ' + sync.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+  if (!r.ok) { const e = new Error(r.status === 401 ? 'token rejected or expired' : r.status === 404 ? 'repo or file not found (token needs Contents access to ' + SYNC_REPO + ')' : d.message || 'HTTP ' + r.status); e.status = r.status; throw e; }
   return d;
 }
 function syncStatusText() {
-  if (!sync.url) return 'Not set up';
+  if (!sync.token) return 'Not set up';
   const when = sync.at ? new Date(sync.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'never';
   return sync.status === 'pending' ? 'Changes waiting to sync' : sync.status && sync.status !== 'ok' ? sync.status : 'Synced ' + when;
 }
 function renderSyncStatus() { const el = $('#syncStatus'); if (el) el.textContent = syncStatusText(); }
 function schedulePush() {
-  if (!sync.url || JSON.stringify(syncData()) === lastSynced) return;
+  if (!sync.token || JSON.stringify(syncData()) === lastSynced) return;
   sync.status = 'pending'; saveSync(); renderSyncStatus();
   clearTimeout(pushTimer); pushTimer = setTimeout(push, 1500);
 }
 async function push() {
-  if (!sync.url || !navigator.onLine) return;
+  if (!sync.token || !navigator.onLine) return;
   const j = JSON.stringify(syncData());
-  try { const d = await syncCall('POST', { data: JSON.parse(j) }); lastSynced = j; sync.rev = d.rev; sync.at = Date.now(); sync.status = 'ok'; }
-  catch (e) { sync.status = 'Sync failed: ' + e.message; }
+  try {
+    let sha = sync.sha;
+    for (let attempt = 0; ; attempt++) {
+      try { const d = await ghFetch('PUT', { message: 'gSpot sync', content: b64e(j), sha }); lastSynced = j; sync.sha = d.content.sha; break; }
+      catch (e) { if (attempt || e.status !== 409) throw e; sha = (await ghFetch('GET')).sha; } // stale sha: retry once, last write wins
+    }
+    sync.at = Date.now(); sync.status = 'ok';
+  } catch (e) { sync.status = 'Sync failed: ' + e.message; }
   saveSync(); renderSyncStatus();
 }
 async function pull() {
-  if (!sync.url || !navigator.onLine) return;
+  if (!sync.token || !navigator.onLine) return;
   try {
-    const d = await syncCall('GET');
-    if (d.rev > (sync.rev || 0) && d.data) {                            // server is newer: adopt it
+    const d = await ghFetch('GET');
+    const data = JSON.parse(b64d(d.content) || 'null');
+    if (d.sha !== sync.sha && data && sync.status !== 'pending') {   // server is newer and we have nothing unsent: adopt it
       clearTimeout(pushTimer);
-      Object.assign(S, d.data); localStorage.setItem(KEY, JSON.stringify(S));
-      lastSynced = JSON.stringify(syncData()); sync.rev = d.rev; sync.status = 'ok'; sync.at = Date.now();
+      Object.assign(S, data); localStorage.setItem(KEY, JSON.stringify(S));
+      lastSynced = JSON.stringify(syncData()); sync.sha = d.sha; sync.status = 'ok'; sync.at = Date.now();
       saveSync(); render(); return;
     }
-    if (sync.status !== 'pending') { lastSynced = JSON.stringify(syncData()); sync.status = 'ok'; sync.at = Date.now(); }
+    sync.sha = d.sha;
+    if (!data) { if (S.rounds.length) sync.status = 'pending'; }         // empty server: seed it from this device
+    else if (sync.status !== 'pending') { lastSynced = JSON.stringify(syncData()); sync.status = 'ok'; sync.at = Date.now(); }
   } catch (e) { sync.status = 'Sync failed: ' + e.message; }
   saveSync(); renderSyncStatus();
 }
 async function syncNow() {
-  sync.url = $('[data-f=syncUrl]').value.trim(); sync.token = $('[data-f=syncToken]').value.trim(); saveSync();
-  if (!sync.url) { renderSyncStatus(); return; }
+  sync.token = $('[data-f=syncToken]').value.trim(); saveSync();
+  if (!sync.token) { renderSyncStatus(); return; }
   $('#syncStatus').textContent = 'Syncing…';
   await pull(); syncReady = true; if (sync.status === 'pending') await push(); else schedulePush();
 }
@@ -314,10 +327,9 @@ function viewCourses() {
     <div class="row"><input data-f="q" placeholder="Club name" style="margin:0"><button class="btn small" data-a="search">Search</button></div>
     <div id="results"></div></div>
     <div class="card"><h2>Sync</h2>
-    <label class="f">Server URL<input data-f="syncUrl" value="${esc(sync.url || '')}" placeholder="https://yourdomain/gspot/sync.php" inputmode="url"></label>
-    <label class="f">Token<input data-f="syncToken" value="${esc(sync.token || '')}" placeholder="same token as config.php"></label>
+    <label class="f">GitHub token <span class="xs">(fine-grained, only ${SYNC_REPO}, Contents: read and write)</span><input data-f="syncToken" type="password" value="${esc(sync.token || '')}" placeholder="github_pat_…"></label>
     <div class="row"><button class="btn small" data-a="syncnow">Sync now</button><span class="mute sm" id="syncStatus">${esc(syncStatusText())}</span></div>
-    <div class="mute xs" style="margin-top:8px">Pulls when the app opens, pushes after every change. Last write wins.</div></div>
+    <div class="mute xs" style="margin-top:8px">Saves to a private file in ${SYNC_REPO}. Pulls when the app opens, pushes after every change. Last write wins.</div></div>
     <div class="card"><h2>Backup</h2><div class="row"><button class="btn sec small" data-a="export">Export JSON</button><label class="btn sec small" style="text-align:center">Import<input type="file" accept=".json" data-f="import" hidden></label></div>
     <div class="mute xs" style="margin-top:8px">${S.rounds.length} rounds · ${S.courses.length} courses stored on this device only.</div></div>`;
 }
