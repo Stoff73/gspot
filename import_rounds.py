@@ -1,5 +1,5 @@
 # Builds gspot-import.json from paper cards. The app scores rounds that lack a differential on import (app.js normalise()).
-# 'tee' must be the tee actually played: CR/Slope come from it. TODO(CSJ): these are the first-listed tees, unconfirmed.
+# 'tee' must be the tee actually played: CR/Slope come from it. Surrey National (Yellow) and Wildernesse (White) confirmed by CSJ 2026-10-15; TODO(CSJ): Westerham, Royal Blackheath, Poult Wood are the first-listed tees, unconfirmed.
 import json, re
 from pathlib import Path
 
@@ -15,7 +15,7 @@ records = [
         'back': [[6,2],[4,2],[5,2],[6,0],[6,1],[7,0],[7,0],[5,2],[5,2]],
     },
     {
-        'date': '2026-06-28', 'course': 'Surrey National Golf Club', 'tee': 'Blue', 'hcp': 16,
+        'date': '2026-06-28', 'course': 'Surrey National Golf Club', 'tee': 'Yellow', 'hcp': 16,
         'name': 'Mozzies vs Lemon & Herb', 'front': [[4,3],[5,2],[3,3],[5,2],[5,2],[5,2],[4,1],[4,3],[5,2]],
         'back': [[4,3],[6,1],[6,2],[3,2],[6,2],[5,2],[5,2],[4,3],[5,2]],
     },
