@@ -24,14 +24,14 @@ Code tasks done on 2026-10-15 are committed and deployed to stoff73.github.io/gs
 - [x] **[code] Score imported rounds.** Any round with every hole entered but no `diff` is scored oldest first by `finalise()` (`app.js`). It uses the same maths as saving a round, against the Index as at that round's date.
 - [x] **[code] Fix `import_rounds.py`.** It now finds its folder itself instead of using the old path, takes a `tee` per record, and no longer hardcodes `hadIndex`. `gspot-import.json` has been regenerated. The 15 May totals now come from the hole scores (gross 98, putts 26).
   Checked in Chrome: importing gives differentials of 22.8, 8.7, 19.9, 11.3, 20.3, 11.3 and an **Index of 9.0**, with points and differentials showing in the Rounds list.
-- [ ] **[CSJ] Confirm which tees were played.** Surrey National (Yellow) and Wildernesse (White) confirmed 2026-10-15; Index is now **10.3** (differentials 22.8, 11.9, 19.9, 11.3, 20.3, 11.3). Westerham, Royal Blackheath and Poult Wood are still open. The `'tee'` values in `import_rounds.py` are the first-listed (back) tees and haven't been confirmed. Change any that are wrong, then run `python3 import_rounds.py`.
+- [ ] **[CSJ] Confirm which tees were played.** Surrey National (Yellow) and Wildernesse (White) confirmed 2026-10-15; Poult Wood (Yellow) also confirmed. Index is **10.3** (differentials 22.8, 11.9, 19.9, 11.3, 22.4, 11.3). Still open: Westerham, and which listed tee Royal Blackheath's "orange" is. The `'tee'` values in `import_rounds.py` are the first-listed (back) tees and haven't been confirmed. Change any that are wrong, then run `python3 import_rounds.py`.
   | Date | Course | Tee in script | Tee actually played |
   |---|---|---|---|
   | 2026-05-15 | Westerham | White | |
   | 2026-06-28 | Surrey National | Yellow | Yellow ✓ |
-  | 2026-07-14 | Royal Blackheath | Purple | |
+  | 2026-07-14 | Royal Blackheath | Purple | "Orange": not on the club card, needs mapping to Purple/Gold/Blue/Composite. Index is 10.3 whichever it is |
   | 2026-07-20 | Wildernesse | White | White ✓ |
-  | 2026-07-22 | Poult Wood | White | |
+  | 2026-07-22 | Poult Wood | Yellow | Yellow ✓ |
   | 2026-08-22 | Wildernesse | White | White ✓ |
 - [ ] **[CSJ] Check the 15 May Westerham card.** The holes add up to 98 (putts 26). The earlier JSON said 96 (putts 27). If the card says 96, two hole scores in `import_rounds.py:12-13` are wrong.
 - [x] ~~**[CSJ] Import on the phone.**~~ Replaced by seeding `gspot-data`, above. Courses → Backup → Import `gspot-import.json`, **after** sync is working, so the import goes to GitHub too. The import replaces everything on the device (`importJson`), including any rounds entered since.

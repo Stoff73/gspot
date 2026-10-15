@@ -1,5 +1,6 @@
 # Builds gspot-import.json from paper cards. The app scores rounds that lack a differential on import (app.js normalise()).
-# 'tee' must be the tee actually played: CR/Slope come from it. Surrey National (Yellow) and Wildernesse (White) confirmed by CSJ 2026-10-15; TODO(CSJ): Westerham, Royal Blackheath, Poult Wood are the first-listed tees, unconfirmed.
+# 'tee' must be the tee actually played: CR/Slope come from it. Surrey National (Yellow), Wildernesse (White), Poult Wood (Yellow) confirmed by CSJ 2026-10-15.
+# TODO(CSJ): Royal Blackheath said "orange" but the club card has no orange tee (Purple/Gold/Blue/Composite); Westerham unconfirmed.
 import json, re
 from pathlib import Path
 
@@ -30,7 +31,7 @@ records = [
         'back': [[3,3],[6,2],[7,1],[2,4],[4,3],[5,1],[4,4],[6,1],[5,3]],
     },
     {
-        'date': '2026-07-22', 'course': 'Poult Wood', 'tee': 'White', 'hcp': 17,
+        'date': '2026-07-22', 'course': 'Poult Wood', 'tee': 'Yellow', 'hcp': 17,
         'name': "Chris's Individual Game", 'front': [[5,2],[6,1],[5,2],[7,1],[2,4],[6,1],[5,1],[5,2],[6,1]],
         'back': [[5,2],[6,1],[4,2],[5,2],[3,3],[5,2],[5,1],[4,2],[6,1]],
     },
