@@ -1,62 +1,37 @@
 # gSpot: tasks to get it working as intended
 
-Source: `docs/status-2026-10-15.md`. Order matters: later tasks depend on earlier ones.
-**[CSJ]** = only CSJ can do it (tokens, the phone, paper cards). **[code]** = a change in this repo.
-Code tasks done on 2026-10-15 are committed and deployed to stoff73.github.io/gspot.
+Updated 2026-10-15 at the end of session 1. Background: `docs/status-2026-10-15.md`. That report describes the state **before** this session's fixes, so use it for the reasoning, not for the current state.
+**[CSJ]** = only CSJ can do it (tokens, the phone, paper cards, facts only they know). **[code]** = a change in this repo or in `gspot-data`, which Claude does without asking.
 
-## 0. Ship the code changes
+## Open, in order
 
-- [x] **Committed and pushed to `main`** (deploys to stoff73.github.io/gspot).
-- [x] **[code] First sync merges instead of overwriting.** A device's first sync keeps its own rounds, courses and any round in progress that the server lacks, matched by id, then pushes the combined set. Tested in Chrome against a fake GitHub API: 6 server rounds plus 1 local round and a round in progress gave 7 rounds and the draft, in a single push with no API key in it.
-- [x] **Seeded `gspot-data/state.json`** with the six imported rounds and the courses, so the phone picks them up on its first sync. No manual import is needed.
+1. - [ ] **[CSJ] Create the GitHub token.** Settings → Developer settings → Fine-grained tokens. Repository: only `Stoff73/gspot-data`. Permission: Contents read and write. Expiry: 1 year. Claude must never create, see or handle it.
+2. - [ ] **[CSJ] First sync from the phone.** In the app go to Courses → Sync, paste the token and tap Sync now.
+   Done when: `gspot-data` shows a `gSpot sync` commit (check with `gh api 'repos/Stoff73/gspot-data/commits?per_page=5'`) and the phone's Handicap tab shows **10.3**.
+   If it fails, the Sync card shows the error: 401 means the token is wrong, 404 means the token lacks Contents access to `gspot-data`.
+3. - [ ] **DECISION (CSJ): which Royal Blackheath tee is "orange"?** The round is 2026-07-14. CSJ said orange, but the club card (royalblackheath.com/course) and GolfAdvisor list only Purple 6,278 yds (71.5/128), Gold 5,996 (70.0/125), Composite 5,866 (69.3/123) and Blue 5,617 (67.8/124). The yardage on CSJ's card decides it. The round is on Purple for now (differential 19.9). The Index stays 10.3 whichever tee it is.
+4. - [ ] **[CSJ] Westerham tee, 2026-05-15.** Currently White (70.5/136). The other options are Yellow (69.4/133) and Red (66.6/125).
+5. - [ ] **[CSJ] Check the 15 May Westerham card total.** The holes in `import_rounds.py:15-16` add up to 98 (putts 26). An older JSON said 96 (putts 27). If the card says 96, two hole scores need correcting.
+6. - [ ] **[code] Apply any answers from 3–5.** Edit the `'tee'`/scores in `import_rounds.py`, run `python3 import_rounds.py`, then update `gspot-data/state.json`. **How depends on whether item 2 has happened:**
+   - No `gSpot sync` commit yet: overwrite `state.json` wholesale from `gspot-import.json`, as was done three times this session.
+   - Phone has synced: edit **only that round** in the live `state.json`, matched by id (e.g. `import-3-2026-07-14`). Set `teeName/cr/slope`, and delete `raw/diff/ags/pts/hadIndex` so the app rescores it on its next pull. Never overwrite the whole file, because the phone may have new rounds in it.
+   Then commit, push, and update this list.
+7. - [ ] **[CSJ, optional] Second device check.** Open the app in another browser with the same token and confirm the data arrives.
+8. - [ ] **[code, when it bites] Rescore later rounds when an older card is added before them.** Saved rounds keep the cap and 9-hole conversion from when they were scored.
+9. - [ ] **[code, when it bites] The Play screen's "Play off" default uses today's Index.** For a back-dated card, overtype it.
+10. - [ ] **[code, when it bites] Edit a saved round.** Right now the only option is delete (`app.js`, `delround`).
+11. - [ ] **[code, years away] Sync size ceiling.** Past 1 MB (~500 rounds at ~1.9 KB each) GitHub stops returning `state.json` inline, and `pull()` would treat the server as empty.
 
-## 1. Get the data off the phone (sync)
+## Done 2026-10-15 (commits `20a6b1a`, `bb0b5b0`, `687beb3`, all pushed and live)
 
-- [x] **[code] Stop the RapidAPI key being synced and exported.** The key now lives in its own localStorage entry, `gspot-apikey`. `normalise()` moves any old `S.settings.apiKey` into it on load, after a pull and after an import. Checked in Chrome: after a reload the key is in `gspot-apikey` and gone from state.
-- [ ] **[CSJ] Create the GitHub token.** Settings → Developer settings → Fine-grained tokens. Repository: only `gspot-data`. Permission: Contents read and write. Expiry: 1 year.
-- [ ] **[CSJ] First sync from the phone.** In the app go to Courses → Sync, paste the token and tap Sync now.
-  Done when: `gspot-data` shows a `gSpot sync` commit and `state.json` is no longer `null`.
-  If it fails, the Sync card shows the error: 401 means the token is wrong, 404 means the token can't access `gspot-data`'s contents.
-- [ ] **[CSJ] Second device check (optional).** Open the app on another browser, paste the same token and confirm it picks up the phone's data.
-
-## 2. Get the six past rounds counting
-
-- [x] **[code] Score imported rounds.** Any round with every hole entered but no `diff` is scored oldest first by `finalise()` (`app.js`). It uses the same maths as saving a round, against the Index as at that round's date.
-- [x] **[code] Fix `import_rounds.py`.** It now finds its folder itself instead of using the old path, takes a `tee` per record, and no longer hardcodes `hadIndex`. `gspot-import.json` has been regenerated. The 15 May totals now come from the hole scores (gross 98, putts 26).
-  Checked in Chrome: importing gives differentials of 22.8, 8.7, 19.9, 11.3, 20.3, 11.3 and an **Index of 9.0**, with points and differentials showing in the Rounds list.
-- [ ] **[CSJ] Confirm which tees were played.** Surrey National (Yellow) and Wildernesse (White) confirmed 2026-10-15; Poult Wood (Yellow) also confirmed. Index is **10.3** (differentials 22.8, 11.9, 19.9, 11.3, 22.4, 11.3). Still open: Westerham, and which listed tee Royal Blackheath's "orange" is. The `'tee'` values in `import_rounds.py` are the first-listed (back) tees and haven't been confirmed. Change any that are wrong, then run `python3 import_rounds.py`.
-  | Date | Course | Tee in script | Tee actually played |
-  |---|---|---|---|
-  | 2026-05-15 | Westerham | White | |
-  | 2026-06-28 | Surrey National | Yellow | Yellow ✓ |
-  | 2026-07-14 | Royal Blackheath | Purple | "Orange": not on the club card, needs mapping to Purple/Gold/Blue/Composite. Index is 10.3 whichever it is |
-  | 2026-07-20 | Wildernesse | White | White ✓ |
-  | 2026-07-22 | Poult Wood | Yellow | Yellow ✓ |
-  | 2026-08-22 | Wildernesse | White | White ✓ |
-- [ ] **[CSJ] Check the 15 May Westerham card.** The holes add up to 98 (putts 26). The earlier JSON said 96 (putts 27). If the card says 96, two hole scores in `import_rounds.py:12-13` are wrong.
-- [x] ~~**[CSJ] Import on the phone.**~~ Replaced by seeding `gspot-data`, above. Courses → Backup → Import `gspot-import.json`, **after** sync is working, so the import goes to GitHub too. The import replaces everything on the device (`importJson`), including any rounds entered since.
-  Done when: the Handicap tab shows an Index.
-
-## 3. Course data
-
-- [x] **Darenth Valley ratings cross-checked.** Pars, SIs and CR/Slope (White 70.6/115, Yellow 69.9/115) match The Social Golfer's 2023 card; only yardages differ by a few yards. Checking the club's own card is still worthwhile when you're next there. Was: check them against the club card (`courses.js:108`, id `manual-darenth-valley`). If they're wrong, fix them in Courses → Darenth Valley.
-- [x] No `courses.js` change needed; added a note there about the cross-check.
-
-## 4. Close the spec gaps
-
-- [x] **[code] Playing Handicap 50% foursomes and 60/40 greensomes**, worked out from a "Partner's Course Handicap" box on the Handicap tab. Checked by hand: CH 9.33 and partner 10 give 10 and 10.
-- [x] **[code] Spec updated.** It now names the RapidAPI course search, drops "cloud sync" from Out of scope, and describes the partner-based calculator.
-
-## 5. Smaller fixes
-
-- [x] **[code] Default date in local time.** `today()` now uses `toLocaleDateString('en-CA')`.
-- [x] **[code] Clamp PCC** to −1..+3, whole numbers. Checked: 7 becomes 3, −4 becomes −1.
-- [x] **[code] Index on the round's date.** `hadIndex` and the 9-hole conversion now use `record(date)`, the Index from rounds on or before that date. Checked: a round dated 1 June has no Index, one dated 1 September does.
-  Still open: the "Play off" default on the Play screen uses today's Index (overtype it for an old card), and rounds saved earlier aren't rescored when an older card is added before them.
-- [ ] **[code] Edit a saved round.** Right now the only option is delete. Not built; do it when it gets in the way.
-- [ ] **[code] Sync size ceiling.** Past 1 MB (~500 rounds) GitHub stops returning `state.json` inline. Years away.
-
-## 6. Housekeeping
-
-- [x] Copied project memory from the old `-Users-CSJ-Desktop-gSpot` folder to this path's memory folder. Updated the path in the handover.
-- [x] Committed `handover/`, `docs/status-2026-10-15.md`, `currentTODO/` and the code changes.
+- [x] ~~RapidAPI key kept off sync/export.~~ It now lives in the `gspot-apikey` localStorage entry, and `normalise()` moves any old `S.settings.apiKey` into it. Checked in Chrome.
+- [x] ~~Imported rounds scored.~~ `normalise()` → `finalise()` scores rounds that lack a `diff`, oldest first, against the Index as at their date. It runs on load, after a pull and after an import. Checked in Chrome.
+- [x] ~~First sync merges instead of overwriting.~~ Local rounds, courses and draft the server lacks are kept, matched by id, then the combined set is pushed. Checked in Chrome against a fake GitHub API (7 rounds plus the draft, one push, no API key).
+- [x] ~~Seeded `gspot-data/state.json`~~ with six rounds and nine courses, so no manual import is needed on the phone.
+- [x] ~~`import_rounds.py`:~~ relative path, per-round `tee`, no hardcoded `hadIndex`. JSON regenerated.
+- [x] ~~Tees confirmed by CSJ:~~ Surrey National Yellow, Wildernesse White (both rounds), Poult Wood Yellow. Index is now **10.3**. Differentials: 22.8, 11.9, 19.9, 11.3, 22.4, 11.3.
+- [x] ~~Darenth Valley ratings cross-checked~~ against The Social Golfer's 2023 card. Pars, SIs and CR/Slope match. Note added in `courses.js`.
+- [x] ~~Playing Handicap 50% foursomes and 60/40 greensomes~~ from the partner's Course Handicap. Checked by hand.
+- [x] ~~Default date in local time; PCC clamped to −1..+3; index-as-at-date for new back-dated rounds.~~
+- [x] ~~Spec updated~~ (course API, sync merge, calculator, out-of-scope list).
+- [x] ~~Project memory copied~~ from the old `-Users-CSJ-Desktop-gSpot` path to the new project path.
