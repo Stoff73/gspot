@@ -1,7 +1,7 @@
 /* gSpot — single-user golf scoring + WHS handicap. Plain JS, localStorage. */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toLocaleDateString('en-CA'); // local YYYY-MM-DD
 const fmt1 = x => x == null ? '–' : x.toFixed(1);
 const toPar = d => d === 0 ? 'E' : d > 0 ? '+' + d : String(d);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -15,6 +15,14 @@ let S = (() => {
 for (const c of window.SEED_COURSES || []) if (!S.courses.some(x => x.id === c.id)) S.courses.push(c); // merge new seeds
 S.courses = S.courses.filter(c => c.id !== 'seed-example' || S.rounds.some(r => r.courseId === c.id)); // drop placeholder
 function save() { localStorage.setItem(KEY, JSON.stringify(S)); if (syncReady) schedulePush(); }
+// RapidAPI key stays on this device: never in S, so never synced or exported.
+const APIKEY = 'gspot-apikey';
+const apiKey = () => localStorage.getItem(APIKEY) || '';
+// Run on every state load: move a legacy key out of settings, score imported rounds that lack a differential.
+function normalise() {
+  if (S.settings?.apiKey) { localStorage.setItem(APIKEY, S.settings.apiKey); delete S.settings.apiKey; }
+  for (const r of S.rounds.slice().sort(byDate)) if (r.diff == null && r.holes.every(h => h.score != null)) finalise(r);
+}
 
 // ---------- sync: state.json in a private GitHub repo, read/written via the contents API. Last write wins. ----------
 const SYNC_REPO = 'Stoff73/gspot-data', SYNC_FILE = 'state.json';
@@ -65,8 +73,16 @@ async function pull() {
     const data = JSON.parse(b64d(d.content) || 'null');
     if (d.sha !== sync.sha && data && sync.status !== 'pending') {   // server is newer and we have nothing unsent: adopt it
       clearTimeout(pushTimer);
-      Object.assign(S, data); localStorage.setItem(KEY, JSON.stringify(S));
-      lastSynced = JSON.stringify(syncData()); sync.sha = d.sha; sync.status = 'ok'; sync.at = Date.now();
+      const first = !sync.sha, mine = { rounds: S.rounds, courses: S.courses, draft: S.draft };
+      Object.assign(S, data); lastSynced = JSON.stringify(syncData());
+      // First sync on this device: keep local rounds/courses the server lacks (by id) and any round in progress;
+      // the later push uploads the union.
+      if (first) {
+        for (const k of ['rounds', 'courses']) for (const x of mine[k]) if (!S[k].some(y => y.id === x.id)) S[k].push(x);
+        S.draft = S.draft || mine.draft;
+      }
+      normalise(); localStorage.setItem(KEY, JSON.stringify(S));
+      sync.sha = d.sha; sync.status = 'ok'; sync.at = Date.now();
       saveSync(); render(); return;
     }
     sync.sha = d.sha;
@@ -88,8 +104,10 @@ function roundHoles(course, which) {
   return course.holes.slice(idx[0], idx[1]).map((h, i) => ({ n: idx[0] + i + 1, par: h[0], si: h[1], yds: h[2] }));
 }
 const coursePar = c => c.holes.reduce((s, h) => s + h[0], 0);
-function record() {
-  const scores = S.rounds.filter(r => r.diff != null).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+function byDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
+// Scoring record from saved rounds, optionally only those played on or before `upTo` (the Index as at that date).
+function record(upTo) {
+  const scores = S.rounds.filter(r => r.diff != null && (!upTo || r.date <= upTo)).sort(byDate)
     .map(r => ({ date: r.date, diff: r.diff, raw: r.raw, holes: r.nHoles || 18 }));
   return WHS.computeRecord(scores);
 }
@@ -174,8 +192,9 @@ function startRound() {
   const order = raw.map(h => h.si).sort((a, b) => a - b); // rank of each hole's SI within the holes played
   const holes = raw.map(h => ({ ...h, rank: order.indexOf(h.si) + 1, score: null, putts: null, fir: null, gir: null }));
   S.draft = { id: uid(), date: v('date') || today(), courseId: course.id, courseName: course.name, teeName: tee.name,
-    cr: R.cr, slope: R.slope, par: R.par, nHoles: R.n, which, pcc: +v('pcc') || 0,
-    courseHcp: parseInt(v('ch'), 10) || 0, hadIndex: currentIndex() != null, holes };
+    cr: R.cr, slope: R.slope, par: R.par, nHoles: R.n, which, pcc: Math.min(3, Math.max(-1, Math.round(+v('pcc') || 0))),
+    courseHcp: parseInt(v('ch'), 10) || 0, holes };
+  S.draft.hadIndex = record(S.draft.date).index != null;
   render();
 }
 function holeRow(h, r, ro) {
@@ -219,13 +238,19 @@ function viewScorecard() {
     ${scorecardHtml(r, false)}
     <button class="btn" data-a="finish" ${done ? '' : 'disabled'}>${done ? 'Save round' : 'Enter every hole to save'}</button>`;
 }
-function finishRound() {
-  const r = S.draft;
+// Score a fully entered round against the Index as at its date (so back-dated cards cap and scale correctly).
+function finalise(r) {
+  const index = record(r.date).index;
+  r.hadIndex = index != null;
   const s = summarise(r.holes, r);
   const sdRaw = WHS.differentialRaw(s.ags, r.cr, r.slope, r.pcc);
-  r.raw = r.nHoles === 9 ? WHS.nineToEighteenRaw(sdRaw, currentIndex()) : sdRaw;
+  r.raw = r.nHoles === 9 ? WHS.nineToEighteenRaw(sdRaw, index) : sdRaw;
   r.diff = WHS.r1(r.raw);
   r.ags = s.ags; r.gross = s.gross; r.pts = s.pts;
+}
+function finishRound() {
+  const r = S.draft;
+  finalise(r);
   S.rounds.push(r); S.draft = null; S.tab = 'rounds'; sub = { view: 'round', id: r.id };
   render();
 }
@@ -274,6 +299,9 @@ function viewHandicap() {
   const chRaw = course && tee ? courseHcpRawFor(course, tee, rec.index) : null;
   const ch = chRaw == null ? null : Math.round(chRaw);
   const ph = a => chRaw == null ? '–' : WHS.playingHandicap(chRaw, a);
+  // Foursomes 50% of combined, greensomes 60% low + 40% high. ponytail: partner entered as a rounded Course Handicap.
+  const p = st.partnerCh === '' || st.partnerCh == null ? null : +st.partnerCh;
+  const pair = f => chRaw == null || p == null ? '–' : Math.round(f(chRaw, p));
   return `<div class="card" style="text-align:center"><h2>Handicap Index</h2><div class="big">${fmt1(rec.index)}</div>
     <div class="mute sm" style="margin-top:6px">${rec.index == null ? `${rec.holes} of 54 holes needed` : `best ${WHS.countedFor(n)} of last ${n}`}${rec.low != null ? ` · low index ${fmt1(rec.low)}` : ''}</div>
     ${trendSvg(rec.history)}</div>
@@ -281,6 +309,8 @@ function viewHandicap() {
     <label class="f">Course<select data-f="calcCourse">${S.courses.map(c => `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
     <label class="f">Tees<select data-f="calcTee">${course.tees.map(t => `<option value="${esc(t.name)}" ${t.name === tee.name ? 'selected' : ''}>${esc(t.name)} · CR ${t.cr} · Slope ${t.slope}</option>`).join('')}</select></label>
     <div class="stat"><div><b>${ch ?? '–'}</b><span>Course hcp</span></div><div><b>${ph(0.95)}</b><span>95% singles</span></div><div><b>${ph(0.85)}</b><span>85% 4BBB</span></div></div>
+    <label class="f" style="margin-top:10px">Partner's Course Handicap (foursomes, greensomes)<input type="number" data-f="partnerCh" value="${p ?? ''}" step="1"></label>
+    <div class="stat"><div><b>${pair((a, b) => 0.5 * (a + b))}</b><span>50% foursomes</span></div><div><b>${pair((a, b) => 0.6 * Math.min(a, b) + 0.4 * Math.max(a, b))}</b><span>60/40 greensomes</span></div></div>
     <div class="mute xs" style="margin-top:8px">${fmt1(rec.index)} × ${tee.slope} / 113 + (${tee.cr} − ${coursePar(course)})</div></div>` : ''}
     <div class="card"><h2>Scoring record</h2><div class="tbl"><table><tr><th>Date</th><th>Diff</th><th>ESR</th><th>Used</th></tr>
     ${rec.record.slice().reverse().map(r => `<tr class="${r.counted ? 'counted' : ''}"><td>${r.date}</td><td>${fmt1(r.diff)}</td><td>${r.adj ? r.adj : ''}</td><td>${r.counted ? '✓' : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="mute">No scores yet</td></tr>'}</table></div>
@@ -319,7 +349,7 @@ function viewStats() {
 // ----- Courses -----
 function viewCourses() {
   if (sub && sub.view === 'edit') return viewCourseEdit(sub.id);
-  const key = S.settings.apiKey || '';
+  const key = apiKey();
   return `<div class="card list">${S.courses.map(c => `<a href="#" data-a="edit" data-id="${c.id}"><div><b>${esc(c.name)}</b><div class="mute sm">${esc(c.city || '')} · par ${coursePar(c)} · ${c.tees.map(t => esc(t.name)).join(', ')}</div></div><span class="mute">›</span></a>`).join('') || '<div class="mute">No courses</div>'}
     <button class="btn sec" data-a="edit" data-id="new" style="margin-top:12px">+ Add course manually</button></div>
     <div class="card"><h2>Search UK Golf Course Data API</h2>
@@ -364,14 +394,14 @@ function saveCourse(id) {
 }
 const API_HOST = 'uk-golf-course-data-api.p.rapidapi.com';
 async function api(path) {
-  const r = await fetch('https://' + API_HOST + path, { headers: { 'x-rapidapi-key': S.settings.apiKey, 'x-rapidapi-host': API_HOST } });
+  const r = await fetch('https://' + API_HOST + path, { headers: { 'x-rapidapi-key': apiKey(), 'x-rapidapi-host': API_HOST } });
   const d = await r.json();
   if (!r.ok || d.message) throw new Error(d.message || 'HTTP ' + r.status);
   return d;
 }
 async function apiSearch() {
   const key = $('[data-f=apiKey]').value.trim(), q = $('[data-f=q]').value.trim();
-  S.settings.apiKey = key; save();
+  localStorage.setItem(APIKEY, key);
   const box = $('#results');
   if (!key || !q) { box.innerHTML = '<div class="msg">Enter an API key and a club name.</div>'; return; }
   box.innerHTML = '<div class="msg">Searching…</div>';
@@ -407,7 +437,7 @@ function exportJson() {
 }
 function importJson(file) {
   const fr = new FileReader();
-  fr.onload = () => { try { const s = JSON.parse(fr.result); if (!s.rounds || !s.courses) throw 0; S = s; render(); } catch { alert('Not a gSpot backup'); } };
+  fr.onload = () => { try { const s = JSON.parse(fr.result); if (!s.rounds || !s.courses) throw 0; S = s; normalise(); render(); } catch { alert('Not a gSpot backup'); } };
   fr.readAsText(file);
 }
 
@@ -448,11 +478,13 @@ $('#view').addEventListener('change', e => {
   else if (f === 'which') { S.settings.lastWhich = e.target.value; render(); }
   else if (f === 'calcCourse') { S.settings.calcCourse = e.target.value; S.settings.calcTee = null; render(); }
   else if (f === 'calcTee') { S.settings.calcTee = e.target.value; render(); }
+  else if (f === 'partnerCh') { S.settings.partnerCh = e.target.value; render(); }
   else if (f === 'statCourse') { S.settings.statCourse = e.target.value; render(); }
   else if (f === 'import' && e.target.files[0]) importJson(e.target.files[0]);
 });
 $('#view').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.dataset.f === 'q') apiSearch(); });
 
+normalise();
 render();
 pull().finally(() => { syncReady = true; if (sync.status === 'pending') push(); else schedulePush(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });

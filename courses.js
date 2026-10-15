@@ -1,5 +1,6 @@
 // Seed courses from the UK Golf Course Data API (rapidapi.com), fetched 2026-09-08. Men's tee sets only.
-// Darenth Valley has no scorecard in that API: card from golfify.io, ratings from 18birdies.com (check against the club's card).
+// Darenth Valley has no scorecard in that API: card from golfify.io, ratings from 18birdies.com. Pars, SIs and CR/Slope
+// cross-checked 2026-10-15 against The Social Golfer's 2023 White card (70.6/115); yardages differ by a few yards only.
 // Hole arrays: 18 x [par, strokeIndex, yards from the first listed tee]. Tees: {name, cr, slope}.
 window.SEED_COURSES = [
  { "id": "uk-d4b930f4-029a-447b-b3f8-c18c8dde479b", "name": "Westerham Golf Club", "city": "Westerham",

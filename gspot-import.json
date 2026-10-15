@@ -1046,7 +1046,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 16,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,
@@ -1110,7 +1109,7 @@
           "yds": 407,
           "rank": 2,
           "score": 5,
-          "putts": 2,
+          "putts": 3,
           "fir": null,
           "gir": null
         },
@@ -1247,7 +1246,7 @@
           "gir": null
         }
       ],
-      "gross": 96,
+      "gross": 98,
       "putts": 27,
       "sourceGameName": "Kantar Epic 2",
       "sourceHcp": 16
@@ -1265,7 +1264,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 16,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,
@@ -1484,7 +1482,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 22,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,
@@ -1703,7 +1700,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 20,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,
@@ -1922,7 +1918,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 17,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,
@@ -2141,7 +2136,6 @@
       "which": "all",
       "pcc": 0,
       "courseHcp": 20,
-      "hadIndex": false,
       "holes": [
         {
           "n": 1,

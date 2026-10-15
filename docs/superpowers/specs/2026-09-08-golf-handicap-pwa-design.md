@@ -5,12 +5,12 @@ Single-user mobile web app. Enter scores hole by hole on one scrolling scorecard
 ## Delivery
 - Plain HTML/CSS/JS PWA. No framework, no build. Files: `index.html`, `app.js`, `handicap.js`, `courses.js` (seed), `sw.js`, `manifest.json`, `test_handicap.js`.
 - Data in localStorage (`gspot` key). JSON export/import for backup.
-- Course data: seeded courses + search via golfcourseapi.com (free key, pasted in Settings) + manual add/edit.
+- Course data: seeded courses + search via the UK Golf Course Data API on RapidAPI (key pasted in the Courses tab, kept on the device, never synced) + manual add/edit.
 
 ## Screens (bottom tabs)
 - **Play**: choose course, tee, date, holes (18 / front 9 / back 9). Shows Course Handicap for that tee. Scorecard is ONE scrolling list: every hole as a row (hole, par, SI, yards, shots received; score stepper defaulting to par; putts stepper; FIR toggle hidden on par 3; GIR toggle; Stableford points; net-double-bogey cap marker). Front nine totals row after hole 9, back nine totals row after 18, round totals at the end, then Save.
 - **Rounds**: history list; tap for the full scorecard and that round's Score Differential.
-- **Handicap**: Index, Low Index (365 days), last 20 differentials with counted ones highlighted, Index trend, Course/Playing Handicap calculator (95%, 85%, 50%, 60/40).
+- **Handicap**: Index, Low Index (365 days), last 20 differentials with counted ones highlighted, Index trend, Course/Playing Handicap calculator (95%, 85%, and 50% / 60/40 from a partner's Course Handicap).
 - **Stats**: scoring avg, avg to par, avg by par 3/4/5, putts/round, FIR%, GIR%, birdie/par/bogey/double+ distribution, best round. Filter by course.
 - **Courses**: list, API search, manual add/edit.
 
@@ -29,10 +29,10 @@ Checked against R&A Rules of Handicapping 2024 (Rules 3.1, 5.1, 5.2, 5.3, 5.7, 5
 `node test_handicap.js`: handi.md worked example (AGS 92, CR 71.5, Slope 125 → 18.5), shots-received, net double bogey, small-record table, caps, ESR, Course Handicap.
 
 ## Out of scope
-GPS, live leaderboards, multi-player, accounts, cloud sync, wearables.
+GPS, live leaderboards, multi-player, accounts, wearables.
 
 ## Sync (added 2026-09-08, reworked same day)
 - No server. App state (courses, rounds, settings, draft) is one JSON file, `state.json`, in the private repo `Stoff73/gspot-data`, read and written through GitHub's contents API with a fine-grained token (Contents read/write on that repo only). The token lives only in the phone's local storage.
-- Pull on open and when the app becomes visible; push 1.5 s after any change; retry when back online. Pushes wait until the first pull has completed so a new device adopts the server copy.
+- Pull on open and when the app becomes visible; push 1.5 s after any change; retry when back online. Pushes wait until the first pull has completed. A device's first sync adopts the server copy but keeps any local rounds/courses (by id) and in-progress round the server lacks, then pushes the union.
 - Last write wins: a push with a stale file sha re-reads the sha and writes again. Ceiling: two devices both editing offline, the later push overwrites. Upgrade path: per-round merge by id.
 - Rejected alternatives: PHP + MySQL on SiteGround (too much setup for one user); a database on the Mac (HTTPS page cannot call a plain-http LAN address, and the Mac must be awake on the same Wi-Fi).
