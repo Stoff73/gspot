@@ -9,13 +9,11 @@ Updated 2026-10-15 at the end of session 1. Background: `docs/status-2026-10-15.
 2. - [ ] **[CSJ] First sync from the phone.** In the app go to Courses → Sync, paste the token and tap Sync now.
    Done when: `gspot-data` shows a `gSpot sync` commit (check with `gh api 'repos/Stoff73/gspot-data/commits?per_page=5'`) and the phone's Handicap tab shows **10.3**.
    If it fails, the Sync card shows the error: 401 means the token is wrong, 404 means the token lacks Contents access to `gspot-data`.
-3. - [ ] **DECISION (CSJ): which Royal Blackheath tee is "orange"?** The round is 2026-07-14. CSJ said orange, but the club card (royalblackheath.com/course) and GolfAdvisor list only Purple 6,278 yds (71.5/128), Gold 5,996 (70.0/125), Composite 5,866 (69.3/123) and Blue 5,617 (67.8/124). The yardage on CSJ's card decides it. The round is on Purple for now (differential 19.9). The Index stays 10.3 whichever tee it is.
-4. - [ ] **[CSJ] Westerham tee, 2026-05-15.** Currently White (70.5/136). The other options are Yellow (69.4/133) and Red (66.6/125).
-5. - [ ] **[CSJ] Check the 15 May Westerham card total.** The holes in `import_rounds.py:15-16` add up to 98 (putts 26). An older JSON said 96 (putts 27). If the card says 96, two hole scores need correcting.
-6. - [ ] **[code] Apply any answers from 3–5.** Edit the `'tee'`/scores in `import_rounds.py`, run `python3 import_rounds.py`, then update `gspot-data/state.json`. **How depends on whether item 2 has happened:**
-   - No `gSpot sync` commit yet: overwrite `state.json` wholesale from `gspot-import.json`, as was done three times this session.
-   - Phone has synced: edit **only that round** in the live `state.json`, matched by id (e.g. `import-3-2026-07-14`). Set `teeName/cr/slope`, and delete `raw/diff/ags/pts/hadIndex` so the app rescores it on its next pull. Never overwrite the whole file, because the phone may have new rounds in it.
-   Then commit, push, and update this list.
+3. - [x] ~~**DECISION (CSJ): which Royal Blackheath tee is "orange"?**~~ Purple, confirmed by CSJ 2026-10-22. Already in the data, so nothing changed.
+4. - [x] ~~**[CSJ] Westerham tee, 2026-05-15.**~~ White, confirmed by CSJ 2026-10-22. Already in the data.
+5. - [x] ~~**[CSJ] Check the 15 May Westerham card total.**~~ CSJ 2026-10-22: use 98 as the hole scores give. The old JSON's 96 is ignored.
+6. - [x] ~~**[code] Apply any answers from 3–5.**~~ 2026-10-22: all three answers matched the live `state.json`, so `gspot-data` was not touched. Only the comment in `import_rounds.py` changed.
+   For future tee or score changes, the method still holds: before the first `gSpot sync` commit, overwrite `state.json` from `gspot-import.json`. After it, edit only that round by id and delete `raw/diff/ags/pts/hadIndex`.
 7. - [ ] **[CSJ, optional] Second device check.** Open the app in another browser with the same token and confirm the data arrives.
 8. - [ ] **[code, when it bites] Rescore later rounds when an older card is added before them.** Saved rounds keep the cap and 9-hole conversion from when they were scored.
 9. - [ ] **[code, when it bites] The Play screen's "Play off" default uses today's Index.** For a back-dated card, overtype it.
