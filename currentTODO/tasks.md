@@ -5,7 +5,7 @@ Updated 2026-10-15 at the end of session 1. Background: `docs/status-2026-10-15.
 
 ## Open, in order
 
-**Tasks 1–2 deferred by CSJ 2026-10-23** to build a dashboard first. Pick them up again after it.
+**Tasks 1–2 were deferred by CSJ on 2026-10-23 while the dashboard was built.** The dashboard is now done, so they are next. CSJ has had the full step-by-step in chat. Direct link: github.com/settings/personal-access-tokens/new. Tip given: save the token in Apple Passwords, since GitHub shows it only once and the laptop needs it too.
 
 0. - [x] ~~**[code] Home dashboard and wide-screen layout.**~~ 2026-10-23. Home replaces Play as the first tab. Laptops get a left rail, and Home, Handicap and Stats lay their cards side by side. Checked in Chrome at 1366px and phone width with the six rounds, and headless in node.
    Found: the phone has none of the six rounds until it syncs (or imports `gspot-import.json`), so Home on the phone stays empty until task 2.
