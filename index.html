@@ -83,13 +83,25 @@ svg.trend{width:100%;height:120px;display:block}
 .tees-edit input{margin:0;padding:6px}
 .msg{padding:10px;border-radius:10px;background:var(--card2);color:var(--mute);font-size:13px;margin:8px 0}
 .pill{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--card2);font-size:12px;color:var(--mute)}
+/* dashboard grid: one column on a phone, side by side on wider screens */
+.dash{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));align-items:start}
+.dash>.card{margin:0}
+.stat.five{grid-template-columns:repeat(5,1fr)} .stat.five div{padding:8px 2px} .stat.five b{font-size:20px}
+.dash .bar em{width:80px}
+/* laptop/desktop: tabs become a left rail, dashboard-style views use the width */
+@media (min-width:900px){
+  body{padding:0 0 0 88px}
+  nav{top:0;right:auto;width:88px;flex-direction:column;padding:12px 0;border-top:0;border-right:1px solid var(--line)}
+  nav button{flex:none;padding:14px 0;font-size:12px}
+  main:has(.dash){max-width:1200px}
+}
 </style>
 </head>
 <body>
 <header><h1 id="title">Play</h1><div class="idx" id="hdrIdx"></div></header>
 <main id="view"></main>
 <nav id="nav">
-  <button data-tab="play"><span>⛳️</span>Play</button>
+  <button data-tab="home"><span>⛳️</span>Home</button>
   <button data-tab="rounds"><span>📋</span>Rounds</button>
   <button data-tab="handicap"><span>🎯</span>Handicap</button>
   <button data-tab="stats"><span>📈</span>Stats</button>

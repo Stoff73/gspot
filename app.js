@@ -10,8 +10,9 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const KEY = 'gspot';
 let S = (() => {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) return s; } catch (e) {}
-  return { courses: window.SEED_COURSES || [], rounds: [], settings: {}, draft: null, tab: 'play' };
+  return { courses: window.SEED_COURSES || [], rounds: [], settings: {}, draft: null, tab: 'home' };
 })();
+if (!S.draft) S.tab = 'home'; // open on the dashboard, or straight back to the scorecard mid-round
 for (const c of window.SEED_COURSES || []) if (!S.courses.some(x => x.id === c.id)) S.courses.push(c); // merge new seeds
 S.courses = S.courses.filter(c => c.id !== 'seed-example' || S.rounds.some(r => r.courseId === c.id)); // drop placeholder
 function save() { localStorage.setItem(KEY, JSON.stringify(S)); if (syncReady) schedulePush(); }
@@ -106,10 +107,17 @@ function roundHoles(course, which) {
 const coursePar = c => c.holes.reduce((s, h) => s + h[0], 0);
 function byDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
 // Scoring record from saved rounds, optionally only those played on or before `upTo` (the Index as at that date).
-function record(upTo) {
-  const scores = S.rounds.filter(r => r.diff != null && (!upTo || r.date <= upTo)).sort(byDate)
-    .map(r => ({ date: r.date, diff: r.diff, raw: r.raw, holes: r.nHoles || 18 }));
-  return WHS.computeRecord(scores);
+const scoresUpTo = upTo => S.rounds.filter(r => r.diff != null && (!upTo || r.date <= upTo)).sort(byDate)
+  .map(r => ({ date: r.date, diff: r.diff, raw: r.raw, holes: r.nHoles || 18 }));
+function record(upTo) { return WHS.computeRecord(scoresUpTo(upTo)); }
+// Index after one more 18-hole round, played today, with unrounded differential `raw`.
+const indexAfter = raw => WHS.computeRecord([...scoresUpTo(), { date: today(), diff: WHS.r1(raw), raw, holes: 18 }]).index;
+// Highest adjusted gross at this tee that leaves the Index passing `ok` (PCC 0).
+function scoreToBeat(course, tee, ok) {
+  const par = coursePar(course);
+  let best = null;
+  for (let g = par - 10; g <= par + 40; g++) if (ok(indexAfter(WHS.differentialRaw(g, tee.cr, tee.slope)))) best = g;
+  return best;
 }
 const currentIndex = () => record().index;
 // Ratings for the holes played: 18-hole CR/Slope, or the nine's own ratings (fallback CR/2, 18-hole slope).
@@ -148,15 +156,89 @@ function summarise(holes, r) {
 }
 
 // ---------- render ----------
-const TITLES = { play: 'Play', rounds: 'Rounds', handicap: 'Handicap', stats: 'Stats', courses: 'Courses' };
+const TITLES = { home: 'Home', play: 'Play', rounds: 'Rounds', handicap: 'Handicap', stats: 'Stats', courses: 'Courses' };
 let sub = null; // sub-view state: {view, id, ...}
 function render() {
   const idx = currentIndex();
   $('#title').textContent = TITLES[S.tab];
   $('#hdrIdx').innerHTML = idx == null ? `<span>No index yet</span>` : `Index <b>${fmt1(idx)}</b>`;
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
-  $('#view').innerHTML = ({ play: viewPlay, rounds: viewRounds, handicap: viewHandicap, stats: viewStats, courses: viewCourses })[S.tab]();
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === (S.tab === 'play' ? 'home' : S.tab)));
+  $('#view').innerHTML = ({ home: viewHome, play: viewPlay, rounds: viewRounds, handicap: viewHandicap, stats: viewStats, courses: viewCourses })[S.tab]();
   save();
+}
+
+// ----- Home -----
+// Course and tee picked in the calculator (Home and Handicap share it), defaulting to the last round played.
+function calcPick() {
+  const st = S.settings, last = S.rounds.slice().sort(byDate).at(-1);
+  const course = S.courses.find(c => c.id === (st.calcCourse || st.lastCourse || last?.courseId)) || S.courses[0];
+  const tee = st.calcTee || (st.calcCourse ? null : st.lastCourse ? st.lastTee : last?.teeName);
+  return { course, tee: course && (course.tees.find(t => t.name === tee) || course.tees[0]) };
+}
+const calcSelects = (course, tee) => `<label class="f">Course<select data-f="calcCourse">${S.courses.map(c => `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+  <label class="f">Tees<select data-f="calcTee">${course.tees.map(t => `<option value="${esc(t.name)}" ${t.name === tee.name ? 'selected' : ''}>${esc(t.name)} · CR ${t.cr} · Slope ${t.slope}</option>`).join('')}</select></label>`;
+const sign1 = x => (x > 0 ? '+' : '') + x.toFixed(1);
+// Where the shots go, each in shots per 18 holes, worst first.
+// ponytail: ranks unlike measures side by side; real strokes-gained needs benchmark data per hole.
+function leaks(rounds) {
+  const hs = rounds.flatMap(r => r.holes.filter(h => h.score != null)), per = hs.length / 18;
+  const tot = (xs, f) => xs.reduce((a, x) => a + f(x), 0), over = h => h.score - h.par, avg = tot(hs, over) / hs.length;
+  const out = [3, 4, 5].map(p => hs.filter(h => h.par === p)).filter(x => x.length).map(x => ({ k: `Par ${x[0].par}s`,
+    v: (tot(x, over) / x.length - avg) * x.length / per, d: `${sign1(tot(x, over) / x.length)} a hole` }));
+  const putted = hs.filter(h => h.putts != null), perP = putted.length / 18;
+  if (putted.length) out.push({ k: '3-putts', v: tot(putted, h => Math.max(0, h.putts - 2)) / perP, d: `${(putted.filter(h => h.putts > 2).length / perP).toFixed(1)} a round` });
+  out.push({ k: 'Blow-ups', v: tot(hs, h => Math.max(0, over(h) - 2)) / per, d: 'past double bogey' });
+  const full = rounds.filter(r => r.holes.length === 18);
+  if (full.length) {
+    const nine = a => tot(full, r => tot(r.holes.slice(a, a + 9), over)) / full.length, f = nine(0), b = nine(9);
+    out.push({ k: b >= f ? 'Back nine' : 'Front nine', v: Math.abs(b - f) / 2, d: `front ${sign1(f)}, back ${sign1(b)}` });
+  }
+  return out.sort((a, b) => b.v - a.v);
+}
+function viewHome() {
+  const rec = record(), idx = rec.index, played = S.rounds.filter(r => r.diff != null).sort(byDate), last = played.at(-1);
+  const resume = S.draft ? `<button class="btn" data-a="play" style="margin:0 0 12px">Resume round · ${esc(S.draft.courseName)} · ${S.draft.holes.filter(h => h.score != null).length}/${S.draft.holes.length} holes</button>` : '';
+  const hist = rec.history.filter(h => h.index != null);
+  const move = idx != null && hist.length > 1 ? WHS.r1(idx - hist.at(-2).index) : null;
+  const cards = [`<div class="card" style="text-align:center"><h2>Handicap Index</h2><div class="big">${fmt1(idx)}</div>
+    <div class="mute sm" style="margin-top:6px">${idx == null ? `${rec.holes} of 54 holes needed` : move == null ? `best ${WHS.countedFor(rec.record.length)} of last ${rec.record.length}`
+      : move === 0 ? 'no change after your last round' : `<span class="${move > 0 ? 'bad' : 'good'}">${move > 0 ? '▲' : '▼'} ${fmt1(Math.abs(move))}</span> after your last round`}${rec.low != null ? ` · low ${fmt1(rec.low)}` : ''}</div>
+    ${trendSvg(rec.history)}</div>`];
+
+  const { course, tee } = calcPick();
+  if (!course) cards.push(`<div class="card"><h2>Next round</h2><div class="mute">Add a course first (Courses tab).</div></div>`);
+  else {
+    let body = '';
+    if (idx != null) {
+      const hold = scoreToBeat(course, tee, i => i <= idx), cut = scoreToBeat(course, tee, i => i < idx), worst = indexAfter(99);
+      body = `<div class="stat"><div><b>${courseHcpFor(course, tee, idx)}</b><span>Shots</span></div>
+        <div><b class="acc">${hold ?? '–'}</b><span>Keeps ${fmt1(idx)}</span></div><div><b class="good">${cut ?? '–'}</b><span>Cuts it</span></div></div>
+        <div class="mute sm" style="margin-top:8px">${worst > idx ? `Anything worse than ${hold ?? '–'} raises it, as far as <b class="bad">${fmt1(worst)}</b>.` : `A bad round can't raise it.`}
+        Scores are "or better", adjusted gross (holes capped at net double bogey), PCC 0.</div>`;
+    }
+    cards.push(`<div class="card"><h2>Next round</h2>${calcSelects(course, tee)}${body}${S.draft ? '' : `<button class="btn" data-a="play">Start a round here</button>`}</div>`);
+  }
+  if (!last) return resume + `<div class="dash">${cards.join('')}<div class="card mute">No rounds yet. Your last round, form and leaks show here once you've saved some.</div></div>`;
+
+  const d = last.gross - last.holes.reduce((a, h) => a + h.par, 0), counted = rec.record.at(-1)?.counted;
+  cards.push(`<div class="card"><h2>Last round</h2><a href="#" data-a="open" data-id="${last.id}" style="color:inherit;text-decoration:none">
+    <div><b>${esc(last.courseName)}</b> <span class="pill">${esc(last.teeName)}</span><div class="mute sm">${last.date} · ${last.which === 'all' ? 18 : 9} holes · off ${last.courseHcp}</div></div>
+    <div class="stat" style="margin-top:10px"><div><b>${last.gross}</b><span class="${d > 0 ? 'bad' : 'good'}">${toPar(d)}</span></div><div><b>${last.pts}</b><span>Points</span></div>
+    <div><b class="${counted ? 'acc' : ''}">${fmt1(last.diff)}</b><span>${counted ? 'Counts' : 'Not counting'}</span></div></div></a></div>`);
+
+  const form = played.filter(r => (r.nHoles || 18) === 18).slice(-5);
+  if (form.length) {
+    const mean = f => form.reduce((a, r) => a + f(r), 0) / form.length;
+    const day = r => new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    cards.push(`<div class="card"><h2>Form · last ${form.length}</h2><div class="stat five">${form.map(r => `<div><b class="${r.pts >= 36 ? 'good' : ''}">${r.pts}</b><span>${day(r)}</span></div>`).join('')}</div>
+      <div class="mute sm" style="margin-top:8px">Averaging <b>${mean(r => r.pts).toFixed(1)}</b> points, where 36 is playing to your handicap. Average differential ${fmt1(mean(r => r.diff))}.</div></div>`);
+  }
+
+  const L = leaks(played), top = Math.max(...L.map(l => l.v));
+  cards.push(`<div class="card"><h2>Where the shots go</h2><div class="sm" style="margin-bottom:8px">Biggest leak: <b class="bad">${L[0].k}</b>, about ${L[0].v.toFixed(1)} shots a round.</div>
+    ${L.map(l => `<div class="bar"><em>${l.k}</em><i style="width:${top > 0 ? 50 * Math.max(0, l.v) / top : 0}%;background:var(--bad)"></i><span>${l.v.toFixed(1)} <span class="mute">${l.d}</span></span></div>`).join('')}
+    <div class="mute xs" style="margin-top:8px">Shots a round. Par types against your average hole, 3-putts against two putts, blow-ups past double bogey, half the gap between the nines.</div></div>`);
+  return resume + `<div class="dash">${cards.join('')}</div>`;
 }
 
 // ----- Play -----
@@ -294,27 +376,24 @@ function viewHandicap() {
   const rec = record();
   const n = rec.record.length;
   const st = S.settings;
-  const course = S.courses.find(c => c.id === (st.calcCourse || st.lastCourse)) || S.courses[0];
-  const tee = course && (course.tees.find(t => t.name === st.calcTee) || course.tees[0]);
+  const { course, tee } = calcPick();
   const chRaw = course && tee ? courseHcpRawFor(course, tee, rec.index) : null;
   const ch = chRaw == null ? null : Math.round(chRaw);
   const ph = a => chRaw == null ? '–' : WHS.playingHandicap(chRaw, a);
   // Foursomes 50% of combined, greensomes 60% low + 40% high. ponytail: partner entered as a rounded Course Handicap.
   const p = st.partnerCh === '' || st.partnerCh == null ? null : +st.partnerCh;
   const pair = f => chRaw == null || p == null ? '–' : Math.round(f(chRaw, p));
-  return `<div class="card" style="text-align:center"><h2>Handicap Index</h2><div class="big">${fmt1(rec.index)}</div>
+  return `<div class="dash"><div class="card" style="text-align:center"><h2>Handicap Index</h2><div class="big">${fmt1(rec.index)}</div>
     <div class="mute sm" style="margin-top:6px">${rec.index == null ? `${rec.holes} of 54 holes needed` : `best ${WHS.countedFor(n)} of last ${n}`}${rec.low != null ? ` · low index ${fmt1(rec.low)}` : ''}</div>
     ${trendSvg(rec.history)}</div>
-    ${course ? `<div class="card"><h2>Course handicap calculator</h2>
-    <label class="f">Course<select data-f="calcCourse">${S.courses.map(c => `<option value="${c.id}" ${c.id === course.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
-    <label class="f">Tees<select data-f="calcTee">${course.tees.map(t => `<option value="${esc(t.name)}" ${t.name === tee.name ? 'selected' : ''}>${esc(t.name)} · CR ${t.cr} · Slope ${t.slope}</option>`).join('')}</select></label>
+    ${course ? `<div class="card"><h2>Course handicap calculator</h2>${calcSelects(course, tee)}
     <div class="stat"><div><b>${ch ?? '–'}</b><span>Course hcp</span></div><div><b>${ph(0.95)}</b><span>95% singles</span></div><div><b>${ph(0.85)}</b><span>85% 4BBB</span></div></div>
     <label class="f" style="margin-top:10px">Partner's Course Handicap (foursomes, greensomes)<input type="number" data-f="partnerCh" value="${p ?? ''}" step="1"></label>
     <div class="stat"><div><b>${pair((a, b) => 0.5 * (a + b))}</b><span>50% foursomes</span></div><div><b>${pair((a, b) => 0.6 * Math.min(a, b) + 0.4 * Math.max(a, b))}</b><span>60/40 greensomes</span></div></div>
     <div class="mute xs" style="margin-top:8px">${fmt1(rec.index)} × ${tee.slope} / 113 + (${tee.cr} − ${coursePar(course)})</div></div>` : ''}
     <div class="card"><h2>Scoring record</h2><div class="tbl"><table><tr><th>Date</th><th>Diff</th><th>ESR</th><th>Used</th></tr>
     ${rec.record.slice().reverse().map(r => `<tr class="${r.counted ? 'counted' : ''}"><td>${r.date}</td><td>${fmt1(r.diff)}</td><td>${r.adj ? r.adj : ''}</td><td>${r.counted ? '✓' : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="mute">No scores yet</td></tr>'}</table></div>
-    <div class="mute xs" style="margin-top:8px">Index = average of the best differentials (Rule 5.2 table), max 54.0, soft cap at low + 3.0, hard cap at low + 5.0, exceptional score reductions applied. Updates immediately, not overnight.</div></div>`;
+    <div class="mute xs" style="margin-top:8px">Index = average of the best differentials (Rule 5.2 table), max 54.0, soft cap at low + 3.0, hard cap at low + 5.0, exceptional score reductions applied. Updates immediately, not overnight.</div></div></div>`;
 }
 
 // ----- Stats -----
@@ -322,7 +401,7 @@ function viewStats() {
   const cid = S.settings.statCourse || '';
   const rs = S.rounds.filter(r => !cid || r.courseId === cid);
   const sel = `<div class="card"><label class="f">Course<select data-f="statCourse"><option value="">All courses</option>${S.courses.map(c => `<option value="${c.id}" ${c.id === cid ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>`;
-  if (!rs.length) return sel + `<div class="card mute">No rounds to analyse.</div>`;
+  if (!rs.length) return `<div class="dash">${sel}<div class="card mute">No rounds to analyse.</div></div>`;
   const holes = rs.flatMap(r => r.holes.filter(h => h.score != null));
   const full = rs.filter(r => (r.nHoles || 18) === 18);
   const avg = (arr, f) => arr.length ? arr.reduce((a, x) => a + f(x), 0) / arr.length : null;
@@ -335,7 +414,7 @@ function viewStats() {
   const best = full.slice().sort((a, b) => a.gross - b.gross)[0];
   const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '–';
   const f1 = x => x == null ? '–' : x.toFixed(2);
-  return sel + `<div class="card"><h2>Scoring (${rs.length} rounds, ${holes.length} holes)</h2><div class="stat">
+  return `<div class="dash">${sel}<div class="card"><h2>Scoring (${rs.length} rounds, ${holes.length} holes)</h2><div class="stat">
     <div><b>${full.length ? Math.round(avg(full, r => r.gross)) : '–'}</b><span>Avg 18-hole</span></div>
     <div><b>${f1(avg(holes, h => h.score - h.par))}</b><span>Avg to par / hole</span></div>
     <div><b>${full.length ? Math.round(avg(full, r => r.pts)) : '–'}</b><span>Avg points</span></div>
@@ -343,7 +422,7 @@ function viewStats() {
     <div><b>${puttsH.length ? (avg(puttsH, h => h.putts) * 18).toFixed(1) : '–'}</b><span>Putts / 18</span></div>
     <div><b>${pct(fir, firOpp.length)}</b><span>Fairways</span></div><div><b>${pct(gir, girOpp.length)}</b><span>Greens</span></div></div>
     ${best ? `<div class="mute sm" style="margin-top:10px">Best round: <b>${best.gross}</b> at ${esc(best.courseName)} (${best.date}), diff ${fmt1(best.diff)}</div>` : ''}</div>
-    <div class="card"><h2>Score distribution</h2>${Object.entries(dist).map(([k, v]) => `<div class="bar"><em>${k}</em><i style="width:${holes.length ? 100 * v / holes.length : 0}%"></i><span>${v} <span class="mute">(${pct(v, holes.length)})</span></span></div>`).join('')}</div>`;
+    <div class="card"><h2>Score distribution</h2>${Object.entries(dist).map(([k, v]) => `<div class="bar"><em>${k}</em><i style="width:${holes.length ? 100 * v / holes.length : 0}%"></i><span>${v} <span class="mute">(${pct(v, holes.length)})</span></span></div>`).join('')}</div></div>`;
 }
 
 // ----- Courses -----
@@ -451,13 +530,14 @@ $('#view').addEventListener('click', e => {
   const keep = () => window.scrollTo(0, y);
   switch (a) {
     case 'start': startRound(); break;
+    case 'play': { const p = calcPick(); if (!S.draft && p.course) { S.settings.lastCourse = p.course.id; S.settings.lastTee = p.tee.name; } S.tab = 'play'; render(); window.scrollTo(0, 0); break; }
     case 'inc': bump(n, el.dataset.f, 1); keep(); break;
     case 'dec': bump(n, el.dataset.f, -1); keep(); break;
     case 'par': { const h = S.draft.holes.find(h => h.n === n); h.score = h.par; render(); keep(); break; }
     case 'tog': { const h = S.draft.holes.find(h => h.n === n), f = el.dataset.f; h[f] = h[f] === true ? false : h[f] === false ? null : true; render(); keep(); break; }
     case 'finish': finishRound(); window.scrollTo(0, 0); break;
     case 'discard': if (confirm('Discard this round?')) { S.draft = null; render(); } break;
-    case 'open': sub = { view: 'round', id }; render(); window.scrollTo(0, 0); break;
+    case 'open': S.tab = 'rounds'; sub = { view: 'round', id }; render(); window.scrollTo(0, 0); break;
     case 'back': sub = null; render(); break;
     case 'delround': if (confirm('Delete this round?')) { S.rounds = S.rounds.filter(r => r.id !== id); sub = null; render(); } break;
     case 'edit': sub = { view: 'edit', id }; render(); window.scrollTo(0, 0); break;

@@ -5,6 +5,11 @@ Updated 2026-10-15 at the end of session 1. Background: `docs/status-2026-10-15.
 
 ## Open, in order
 
+**Tasks 1–2 deferred by CSJ 2026-10-23** to build a dashboard first. Pick them up again after it.
+
+0. - [x] ~~**[code] Home dashboard and wide-screen layout.**~~ 2026-10-23. Home replaces Play as the first tab. Laptops get a left rail, and Home, Handicap and Stats lay their cards side by side. Checked in Chrome at 1366px and phone width with the six rounds, and headless in node.
+   Found: the phone has none of the six rounds until it syncs (or imports `gspot-import.json`), so Home on the phone stays empty until task 2.
+
 1. - [ ] **[CSJ] Create the GitHub token.** Settings → Developer settings → Fine-grained tokens. Repository: only `Stoff73/gspot-data`. Permission: Contents read and write. Expiry: 1 year. Claude must never create, see or handle it.
 2. - [ ] **[CSJ] First sync from the phone.** In the app go to Courses → Sync, paste the token and tap Sync now.
    Done when: `gspot-data` shows a `gSpot sync` commit (check with `gh api 'repos/Stoff73/gspot-data/commits?per_page=5'`) and the phone's Handicap tab shows **10.3**.
